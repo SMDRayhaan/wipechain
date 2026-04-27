@@ -8,11 +8,10 @@ pub struct WipeToken {
     pub expires_at: u64,
 }
 
-// 🔑 VERY simple signing (we upgrade later)
 const SECRET: &str = "super_secret_key";
 
 pub fn generate_token(volume_id: &str, method: &str) -> String {
-    let expires_at = current_time() + 60; // 60 sec expiry
+    let expires_at = current_time() + 60;
 
     let payload = WipeToken {
         volume_id: volume_id.to_string(),
@@ -21,7 +20,6 @@ pub fn generate_token(volume_id: &str, method: &str) -> String {
     };
 
     let json = serde_json::to_string(&payload).unwrap();
-
     let signature = format!("{}{}", json, SECRET);
 
     base64::encode(format!("{}::{}", json, signature))

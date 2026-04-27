@@ -3,6 +3,9 @@ use crate::os::windows::volume::get_volumes;
 use crate::os::windows::bitlocker::get_encryption_status;
 use crate::os::windows::executor::run_command;
 
+// =========================
+// GET DISKS
+// =========================
 pub fn get_system_disks() -> Result<Vec<Disk>, String> {
     let volumes = get_volumes()?;
     let encryption = get_encryption_status()?;
@@ -30,8 +33,11 @@ pub fn get_system_disks() -> Result<Vec<Disk>, String> {
     Ok(result)
 }
 
+// =========================
+// VALIDATION (PREVIEW ONLY)
+// =========================
 pub fn validate_volume_for_wipe(volume_id: &str) -> Result<(), String> {
-    let volumes = get_volumes()?;
+    let volumes = get_volumes()?; // WMI
 
     let volume = volumes
         .into_iter()
@@ -45,33 +51,39 @@ pub fn validate_volume_for_wipe(volume_id: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub fn wipe_volume(volume_id: &str, dry_run: bool) -> Result<String, String> {
-    validate_volume_for_wipe(volume_id)?;
+// =========================
+// ENCRYPTION CHECK (PREVIEW ONLY)
+// =========================
+pub fn is_volume_encrypted(volume_id: &str) -> Result<bool, String> {
+    let encryption = get_encryption_status()?; // WMI
 
-    // 🔍 Check encryption
-    let encryption = get_encryption_status()?;
-
-    let is_encrypted = encryption.iter().any(|e| {
+    let enc = encryption.iter().find(|e| {
         e.drive_letter.as_deref() == Some(volume_id)
-            && e.protection_status == Some(1)
     });
 
-    // 🧠 Strategy decision
-    if is_encrypted {
-        let command = format!("manage-bde -off {}", volume_id);
+    Ok(enc
+        .and_then(|e| e.protection_status)
+        .map(|s| s == 1)
+        .unwrap_or(false))
+}
 
-        if dry_run {
-            return Ok(format!("DRY RUN (CRYPTO ERASE): {}", command));
-        }
+// =========================
+// EXECUTION (NO WMI)
+// =========================
+pub fn wipe_volume(method: &str, volume_id: &str, dry_run: bool) -> Result<String, String> {
 
-        return run_command("cmd", &["/C", &command]);
+    if volume_id == "C:" {
+        return Err("Refusing to wipe system volume (C:)".into());
     }
 
-    // fallback → overwrite
-    let command = format!("cipher /w:{}", volume_id);
+    let command = match method {
+        "CRYPTO_ERASE" => format!("manage-bde -off {}", volume_id),
+        "OVERWRITE" => format!("cipher /w:{}", volume_id),
+        _ => return Err("Invalid wipe method".into()),
+    };
 
     if dry_run {
-        return Ok(format!("DRY RUN (OVERWRITE): {}", command));
+        return Ok(format!("DRY RUN ({}): {}", method, command));
     }
 
     run_command("cmd", &["/C", &command])

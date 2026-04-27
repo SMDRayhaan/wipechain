@@ -1,7 +1,7 @@
 use std::process::Command;
 
 pub fn run_command(cmd: &str, args: &[&str]) -> Result<String, String> {
-    println!("Running command: {} {:?}", cmd, args);
+    println!("▶ Running command: {} {:?}", cmd, args);
 
     let output = Command::new(cmd)
         .args(args)
@@ -9,15 +9,18 @@ pub fn run_command(cmd: &str, args: &[&str]) -> Result<String, String> {
 
     match output {
         Ok(output) => {
-            println!("Status: {:?}", output.status);
-
             if !output.status.success() {
-                return Err(String::from_utf8_lossy(&output.stderr).to_string());
+                let err = String::from_utf8_lossy(&output.stderr).to_string();
+                println!("❌ Command failed: {}", err);
+                return Err(err);
             }
 
-            Ok(String::from_utf8_lossy(&output.stdout).to_string())
+            let out = String::from_utf8_lossy(&output.stdout).to_string();
+            println!("✅ Command success");
+            Ok(out)
         }
         Err(e) => {
+            println!("💥 Execution error: {}", e);
             Err(format!("Execution failed: {}", e))
         }
     }
